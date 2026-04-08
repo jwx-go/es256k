@@ -1,0 +1,5 @@
+Changes
+=======
+
+v4.0.0-alpha1 UNRELEASED
+  * Initial version, ES256K (secp256k1) support for github.com/lestrrat-go/jwx/v4.
