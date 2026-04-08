@@ -33,7 +33,7 @@ func init() {
 	jwa.RegisterSignatureAlgorithm(ES256K())
 
 	// Register secp256k1 curve for ECDSA key handling
-	ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256())
+	ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256()) //nolint:staticcheck // secp256k1 requires elliptic.Curve
 
 	// Register ES256K in the algorithm-to-key-type mapping
 	jws.RegisterAlgorithmForKeyType(jwa.EC(), ES256K())

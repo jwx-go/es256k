@@ -44,7 +44,7 @@ func TestES256KSign(t *testing.T) {
 	t.Parallel()
 	payload := []byte("Hello, World!")
 
-	key, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+	key, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader) //nolint:staticcheck // secp256k1 requires elliptic.Curve
 	require.NoError(t, err, "ECDSA key generated")
 
 	signed, err := jws.Sign(payload, jws.WithKey(es256k.ES256K(), key))
@@ -117,12 +117,12 @@ func BenchmarkKeyInstantiation(b *testing.B) {
 	})
 	b.Run("Use jwk.Import", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			var raw ecdsa.PublicKey
-			raw.Curve = secp256k1.S256()
-			raw.X = &big.Int{}
-			raw.Y = &big.Int{}
-			raw.X.SetBytes(x)
-			raw.Y.SetBytes(y)
+			var raw ecdsa.PublicKey        //nolint:staticcheck // benchmark intentionally uses deprecated field access
+			raw.Curve = secp256k1.S256()   //nolint:staticcheck // secp256k1 requires elliptic.Curve
+			raw.X = &big.Int{}             //nolint:staticcheck // benchmark intentionally uses deprecated field access
+			raw.Y = &big.Int{}             //nolint:staticcheck // benchmark intentionally uses deprecated field access
+			raw.X.SetBytes(x)              //nolint:staticcheck // benchmark intentionally uses deprecated field access
+			raw.Y.SetBytes(y)              //nolint:staticcheck // benchmark intentionally uses deprecated field access
 
 			key, err := jwk.Import[jwk.Key](&raw)
 			if err != nil {
