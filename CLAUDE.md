@@ -34,3 +34,15 @@ GOEXPERIMENT=jsonv2 go test ./...
 |------|---------|
 | `es256k.go` | Package doc, algorithm constants, `init()` registration |
 | `es256k_test.go` | Tests |
+
+## Branch Policy
+
+| Branch | Purpose |
+|--------|---------|
+| `v*` (e.g. `v4`) | Release tags only. NEVER commit directly to these branches. |
+| `develop/v*` (e.g. `develop/v4`) | Active development. All feature branches merge here. |
+| Feature branches | Branch from `develop/v*`, merge back via PR. |
+
+- Tags are cut from `v*` branches.
+- `v*` branches should never be directly worked on.
+- Regular development happens on `develop/v*` and feature branches.
