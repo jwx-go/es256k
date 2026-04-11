@@ -1,14 +1,12 @@
 version: 2
 updates:
-  - package-ecosystem: gomod
-    directory: /
+  - package-ecosystem: "gomod"
+    directory: "/"
     schedule:
-      interval: weekly
-    reviewers:
-      - lestrrat
-  - package-ecosystem: github-actions
-    directory: /
+      interval: "weekly"
+    target-branch: "develop/v4"
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-      interval: weekly
-    reviewers:
-      - lestrrat
+      interval: "weekly"
+    target-branch: "develop/v4"
