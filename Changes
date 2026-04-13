@@ -1,5 +1,8 @@
 Changes
 =======
 
+v4.0.0-alpha2 13 Apr 2026
+  * Compatibility release for jwx/v4 v4.0.0-scratch.15. No code changes.
+
 v4.0.0-alpha1 8 Apr 2026
   * Initial version, ES256K (secp256k1) support for github.com/lestrrat-go/jwx/v4.
