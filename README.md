@@ -61,6 +61,21 @@ signed, _ := jws.Sign(payload, jws.WithKey(es256k.ES256K(), key))
 verified, _ := jws.Verify(signed, jws.WithKey(es256k.ES256K(), jwkKey))
 ```
 
+## Signature Malleability (low-S)
+
+ES256K signatures produced and accepted by this module do **not** enforce low-S
+canonicalization. The underlying `crypto/ecdsa` implementation may emit either
+of the two mathematically valid `(r, s)` / `(r, n-s)` pairs, and verification
+accepts both. This matches the behavior of every other ECDSA algorithm in jwx
+(ES256, ES384, ES512) and is appropriate for JWS, where signatures are bound to
+a specific payload and are not used as unique identifiers.
+
+If you are bridging JWS-signed material into a system that treats ECDSA
+signatures as unique identifiers (e.g. Bitcoin-style transaction hashes, or
+signature-equality caches), you are responsible for applying low-S
+normalization yourself. Do not assume two verifiable ES256K signatures over the
+same payload are byte-equal.
+
 ## License
 
 MIT
