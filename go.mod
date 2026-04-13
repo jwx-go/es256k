@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1
 	github.com/lestrrat-go/dsig-secp256k1 v1.0.0
-	github.com/lestrrat-go/jwx/v4 v4.0.0-scratch.17.0.20260413225300-c0aa9026c40e
+	github.com/lestrrat-go/jwx/v4 v4.0.0-scratch.18
 	github.com/stretchr/testify v1.11.1
 )
 
