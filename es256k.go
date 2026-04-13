@@ -4,6 +4,18 @@
 // verification, and key management:
 //
 //	import _ "github.com/jwx-go/es256k/v4"
+//
+// # Signature malleability (low-S)
+//
+// ES256K signatures produced and accepted by this module do not enforce
+// low-S canonicalization. Signing may emit either of the two mathematically
+// valid (r, s) / (r, n-s) pairs, and verification accepts both. This
+// matches every other ECDSA algorithm in jwx (ES256, ES384, ES512) and is
+// appropriate for JWS, where signatures are bound to a specific payload
+// and are not used as unique identifiers. Callers bridging JWS-signed
+// material into systems that treat ECDSA signatures as unique identifiers
+// (e.g. Bitcoin-style transaction hashes, signature-equality caches) must
+// apply low-S normalization themselves.
 package es256k
 
 import (
