@@ -16,9 +16,18 @@
 // material into systems that treat ECDSA signatures as unique identifiers
 // (e.g. Bitcoin-style transaction hashes, signature-equality caches) must
 // apply low-S normalization themselves.
+//
+// # Registration
+//
+// Registration happens in init(). If any underlying jwx Register* call
+// returns an error, init() panics — importing this package will crash the
+// program at load time. This is the house style across all jwx-go extension
+// modules.
 package es256k
 
 import (
+	"fmt"
+
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	dsigsecp256k1 "github.com/lestrrat-go/dsig-secp256k1"
 	"github.com/lestrrat-go/jwx/v4/jwa"
@@ -39,17 +48,28 @@ func Secp256k1() jwa.EllipticCurveAlgorithm {
 
 func init() {
 	// Register the secp256k1 elliptic curve
-	jwa.RegisterEllipticCurveAlgorithm(Secp256k1())
+	panicOnRegistrationError(jwa.RegisterEllipticCurveAlgorithm(Secp256k1()))
 
 	// Register ES256K signature algorithm
-	jwa.RegisterSignatureAlgorithm(ES256K())
+	panicOnRegistrationError(jwa.RegisterSignatureAlgorithm(ES256K()))
 
 	// Register secp256k1 curve for ECDSA key handling
-	ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256()) //nolint:staticcheck // secp256k1 requires elliptic.Curve
+	panicOnRegistrationError(ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256())) //nolint:staticcheck // secp256k1 requires elliptic.Curve
 
 	// Register ES256K in the algorithm-to-key-type mapping
-	jws.RegisterAlgorithmForKeyType(jwa.EC(), ES256K())
+	panicOnRegistrationError(jws.RegisterAlgorithmForKeyType(jwa.EC(), ES256K()))
 
 	// Register the dsig algorithm mapping for ES256K
-	jwsbb.RegisterDsigAlgorithm("ES256K", dsigsecp256k1.ECDSAWithSecp256k1AndSHA256)
+	panicOnRegistrationError(jwsbb.RegisterDsigAlgorithm("ES256K", dsigsecp256k1.ECDSAWithSecp256k1AndSHA256))
+}
+
+// panicOnRegistrationError converts a non-nil error returned by a jwx
+// Register* call during init() into an import-time panic. The rule
+// (documented in jwx's internals.md) is that a failed Register* leaves
+// the extension unusable, so we surface it immediately instead of
+// letting the program continue in a broken state.
+func panicOnRegistrationError(err error) {
+	if err != nil {
+		panic(fmt.Sprintf("jwx-go/es256k: registration failed: %s", err))
+	}
 }
