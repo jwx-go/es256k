@@ -97,7 +97,7 @@ func BenchmarkKeyInstantiation(b *testing.B) {
 	require.NoError(b, err, `DecodeBase64 should succeed`)
 
 	b.Run("Use json.Marshal/json.Unmarshal", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			serialized, err := json.Marshal(map[string]any{
 				"kty": "EC",
 				"crv": "secp256k1",
@@ -116,13 +116,13 @@ func BenchmarkKeyInstantiation(b *testing.B) {
 		}
 	})
 	b.Run("Use jwk.Import", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			var raw ecdsa.PublicKey        //nolint:staticcheck // benchmark intentionally uses deprecated field access
-			raw.Curve = secp256k1.S256()   //nolint:staticcheck // secp256k1 requires elliptic.Curve
-			raw.X = &big.Int{}             //nolint:staticcheck // benchmark intentionally uses deprecated field access
-			raw.Y = &big.Int{}             //nolint:staticcheck // benchmark intentionally uses deprecated field access
-			raw.X.SetBytes(x)              //nolint:staticcheck // benchmark intentionally uses deprecated field access
-			raw.Y.SetBytes(y)              //nolint:staticcheck // benchmark intentionally uses deprecated field access
+		for range b.N {
+			var raw ecdsa.PublicKey      //nolint:staticcheck // benchmark intentionally uses deprecated field access
+			raw.Curve = secp256k1.S256() //nolint:staticcheck // secp256k1 requires elliptic.Curve
+			raw.X = &big.Int{}           //nolint:staticcheck // benchmark intentionally uses deprecated field access
+			raw.Y = &big.Int{}           //nolint:staticcheck // benchmark intentionally uses deprecated field access
+			raw.X.SetBytes(x)            //nolint:staticcheck // benchmark intentionally uses deprecated field access
+			raw.Y.SetBytes(y)            //nolint:staticcheck // benchmark intentionally uses deprecated field access
 
 			key, err := jwk.Import[jwk.Key](&raw)
 			if err != nil {

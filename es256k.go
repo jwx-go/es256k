@@ -53,7 +53,7 @@ func init() {
 	// interface. jwk/ecdsa.RegisterCurve's curve parameter must be an
 	// elliptic.Curve (that is the shape crypto/ecdsa.Verify also uses
 	// for non-stdlib curves), so this call is unavoidable. The scoped
-	// nolint documents why.
+	// directive on the line below documents why.
 	panicOnRegistrationError(ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256(), secp256k1PointValidator)) //nolint:staticcheck // secp256k1.S256() returns a deprecated-interface value by necessity; jwk/ecdsa takes elliptic.Curve
 
 	// Register ES256K in the algorithm-to-key-type mapping
