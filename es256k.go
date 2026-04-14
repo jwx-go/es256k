@@ -57,9 +57,16 @@ func init() {
 	// Register secp256k1 curve for ECDSA key handling, with a point
 	// validator backed by secp256k1.ParsePubKey — the library's own
 	// non-deprecated "parse and validate an uncompressed SEC1 point"
-	// entry point. This replaces the earlier fallback to the deprecated
-	// elliptic.Curve.IsOnCurve method.
-	panicOnRegistrationError(ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256(), secp256k1PointValidator))
+	// entry point. Point validation itself no longer touches any
+	// deprecated API.
+	//
+	// secp256k1.S256() below still trips SA1019 because it returns
+	// *KoblitzCurve which satisfies the deprecated elliptic.Curve
+	// interface. jwk/ecdsa.RegisterCurve's curve parameter must be an
+	// elliptic.Curve (that is the shape crypto/ecdsa.Verify also uses
+	// for non-stdlib curves), so this call is unavoidable. The scoped
+	// nolint documents why.
+	panicOnRegistrationError(ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256(), secp256k1PointValidator)) //nolint:staticcheck // secp256k1.S256() returns a deprecated-interface value by necessity; jwk/ecdsa takes elliptic.Curve
 
 	// Register ES256K in the algorithm-to-key-type mapping
 	panicOnRegistrationError(jws.RegisterAlgorithmForKeyType(jwa.EC(), ES256K()))
