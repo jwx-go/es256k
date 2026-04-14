@@ -27,6 +27,7 @@ package es256k
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	dsigsecp256k1 "github.com/lestrrat-go/dsig-secp256k1"
@@ -53,8 +54,12 @@ func init() {
 	// Register ES256K signature algorithm
 	panicOnRegistrationError(jwa.RegisterSignatureAlgorithm(ES256K()))
 
-	// Register secp256k1 curve for ECDSA key handling
-	panicOnRegistrationError(ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256())) //nolint:staticcheck // secp256k1 requires elliptic.Curve
+	// Register secp256k1 curve for ECDSA key handling, with a point
+	// validator backed by secp256k1.ParsePubKey — the library's own
+	// non-deprecated "parse and validate an uncompressed SEC1 point"
+	// entry point. This replaces the earlier fallback to the deprecated
+	// elliptic.Curve.IsOnCurve method.
+	panicOnRegistrationError(ourecdsa.RegisterCurve(Secp256k1(), secp256k1.S256(), secp256k1PointValidator))
 
 	// Register ES256K in the algorithm-to-key-type mapping
 	panicOnRegistrationError(jws.RegisterAlgorithmForKeyType(jwa.EC(), ES256K()))
@@ -62,6 +67,27 @@ func init() {
 	// Register the dsig algorithm mapping for ES256K
 	panicOnRegistrationError(jwsbb.RegisterDsigAlgorithm("ES256K", dsigsecp256k1.ECDSAWithSecp256k1AndSHA256))
 }
+
+// secp256k1PointValidator implements jwk/ecdsa.PointValidator for
+// secp256k1 by routing (x, y) through secp256k1.ParsePubKey. That
+// function validates the SEC1 uncompressed encoding, enforces x < p
+// and y < p, and rejects points not on the secp256k1 curve. It also
+// rejects the point at infinity as a side effect of the format check.
+//
+// Coordinates are padded to 32 bytes per secp256k1 field size, so a
+// legitimate jwk key whose x or y big.Int has leading zero bytes is
+// still encoded correctly.
+var secp256k1PointValidator = ourecdsa.PointValidatorFunc(func(x, y *big.Int) error {
+	const coordSize = 32
+	buf := make([]byte, 1+2*coordSize)
+	buf[0] = 0x04
+	x.FillBytes(buf[1 : 1+coordSize])
+	y.FillBytes(buf[1+coordSize:])
+	if _, err := secp256k1.ParsePubKey(buf); err != nil {
+		return fmt.Errorf(`invalid secp256k1 public key: %w`, err)
+	}
+	return nil
+})
 
 // panicOnRegistrationError converts a non-nil error returned by a jwx
 // Register* call during init() into an import-time panic. The rule
