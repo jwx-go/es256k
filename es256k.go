@@ -25,14 +25,17 @@ import (
 	"github.com/lestrrat-go/jwx/v4/jws/jwsbb"
 )
 
+var es256kAlg = jwa.NewSignatureAlgorithm("ES256K")
+var secp256k1Curve = jwa.NewEllipticCurveAlgorithm("secp256k1")
+
 // ES256K returns the ES256K signature algorithm identifier.
 func ES256K() jwa.SignatureAlgorithm {
-	return jwa.NewSignatureAlgorithm("ES256K")
+	return es256kAlg
 }
 
 // Secp256k1 returns the secp256k1 elliptic curve algorithm identifier.
 func Secp256k1() jwa.EllipticCurveAlgorithm {
-	return jwa.NewEllipticCurveAlgorithm("secp256k1")
+	return secp256k1Curve
 }
 
 func init() {
