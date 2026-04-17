@@ -19,6 +19,21 @@ This module registers the secp256k1 curve and ES256K signature algorithm via jwx
 | `jwk/ecdsa` | `RegisterCurve()` | Map secp256k1 to `elliptic.Curve` for ECDSA key handling |
 | `jws` | `RegisterAlgorithmForKeyType()` | Associate ES256K with EC key type |
 | `jwsbb` | `RegisterDsigAlgorithm()` | Map ES256K to dsig algorithm |
+| `jwk` | `RegisterX509Decoder()` | Decode secp256k1 PEM blocks (SEC1, PKCS#8, SubjectPublicKeyInfo) that Go stdlib rejects |
+
+### secp256k1 PEM decoding
+
+Go's `crypto/x509` hardcodes a list of four named curves (P-224, P-256, P-384, P-521) in `namedCurveFromOID`. secp256k1's OID (`1.3.132.0.10`) is not in that list, so stdlib fails any attempt to parse a secp256k1-carrying PEM block with `x509: unknown elliptic curve`.
+
+`x509.go` registers a secondary `X509Decoder` via `jwk.RegisterX509Decoder`. The decoder handles:
+
+- `EC PRIVATE KEY` (SEC1 / RFC 5915)
+- `PRIVATE KEY` (PKCS#8 / RFC 5958 wrapping SEC1 inside)
+- `PUBLIC KEY` (SubjectPublicKeyInfo / RFC 5280)
+
+For each it asn1-unmarshals a cut-down struct, checks the curve OID is secp256k1, and builds an `*ecdsa.PrivateKey` or `*ecdsa.PublicKey` backed by `github.com/decred/dcrd/dcrec/secp256k1/v4`. Non-secp256k1 inputs return an error so `jwk.decodeX509`'s iteration falls through to the default stdlib-backed decoder.
+
+`CERTIFICATE` blocks are out of scope for now — full cert parsing is a much larger undertaking and the current demand is key material only.
 
 ## Build / Test
 
@@ -33,7 +48,10 @@ GOEXPERIMENT=jsonv2 go test ./...
 | File | Purpose |
 |------|---------|
 | `es256k.go` | Package doc, algorithm constants, `init()` registration |
-| `es256k_test.go` | Tests |
+| `x509.go` | secp256k1 PEM / X509 decoder |
+| `es256k_test.go` | Signing / verification tests |
+| `x509_test.go` | PEM decoding tests + stdlib-curve fallthrough check |
+| `fuzz_test.go` | Fuzz harness |
 
 ## Branch Policy
 
