@@ -6,8 +6,8 @@ github.com/lestrrat-go/dsig v1.3.0 h1:phjMOCXvYzhuIgn7Voe2rex8z166vGfxRxmqM25P9/
 github.com/lestrrat-go/dsig v1.3.0/go.mod h1:RD2eOaidyPvpc7IJQoO3Qq52RWdy8ZcJs8lrOnoa1Kc=
 github.com/lestrrat-go/dsig-secp256k1 v1.0.0 h1:JpDe4Aybfl0soBvoVwjqDbp+9S1Y2OM7gcrVVMFPOzY=
 github.com/lestrrat-go/dsig-secp256k1 v1.0.0/go.mod h1:CxUgAhssb8FToqbL8NjSPoGQlnO4w3LG1P0qPWQm/NU=
-github.com/lestrrat-go/jwx/v4 v4.0.0-scratch.20 h1:PfpHOKPiFG83Nbo4W9S5aU8IE8svx6DVHc+Tg6zweWg=
-github.com/lestrrat-go/jwx/v4 v4.0.0-scratch.20/go.mod h1:IlbSfVeg2o2oa43Rnn0lXClSXh+xQHwVFATC7lbE6oU=
+github.com/lestrrat-go/jwx/v4 v4.0.0-scratch.26.0.20260418001848-fa368d81e127 h1:1OegW9HE0DAki7bINdfTh6qHDTrMQFOLl+ArRtB/Zxg=
+github.com/lestrrat-go/jwx/v4 v4.0.0-scratch.26.0.20260418001848-fa368d81e127/go.mod h1:F2a0rSyXsqLAL0orBZGOXrzQGv018Tx4eiEWWYR7Yzo=
 github.com/lestrrat-go/option/v3 v3.0.0-alpha1 h1:dvdzLwm/Ba5CJUF3jQP7w/iNYSLfy7yyh9XXNa1WjxI=
 github.com/lestrrat-go/option/v3 v3.0.0-alpha1/go.mod h1:5KSg20dfsKkNJtjDmaQRLZVXuUrzuCCcz/gbDK0pfKk=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

@@ -2,13 +2,14 @@ package es256k
 
 import (
 	"crypto/ecdsa"
+	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
-	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk/jwkbb"
 )
 
 // secp256k1 and ECDSA algorithm OIDs.
@@ -16,19 +17,13 @@ import (
 // Go's crypto/x509 hardcodes a list of four named curves in namedCurveFromOID
 // (P-224, P-256, P-384, P-521). secp256k1's OID (1.3.132.0.10) is not in that
 // list, so any stdlib attempt to parse a secp256k1-carrying PEM block fails
-// with "x509: unknown elliptic curve". This decoder fills that gap by
-// handling the specific block shapes we care about — SEC1, PKCS#8, and
-// SubjectPublicKeyInfo — when the embedded OID is secp256k1.
+// with "x509: unknown elliptic curve". The decoders below fill that gap for
+// the specific block shapes we care about — SEC1, PKCS#8, and
+// SubjectPublicKeyInfo — when the embedded OID is secp256k1, and delegate to
+// stdlib for every other curve.
 var (
 	oidSecp256k1      = asn1.ObjectIdentifier{1, 3, 132, 0, 10}
 	oidPublicKeyECDSA = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
-)
-
-// Block types we handle.
-const (
-	blockECPrivateKey = "EC PRIVATE KEY"
-	blockPrivateKey   = "PRIVATE KEY"
-	blockPublicKey    = "PUBLIC KEY"
 )
 
 // ASN.1 shapes.
@@ -61,100 +56,76 @@ type pkixPublicKeyInfo struct {
 	PublicKey asn1.BitString
 }
 
-type identSecp256k1X509Decoder struct{}
-
 func init() {
-	panicOnRegistrationError(jwk.RegisterX509Decoder(
-		identSecp256k1X509Decoder{},
-		jwk.X509DecodeFunc(decodeSecp256k1PEM),
+	// jwkbb dispatches decoders by PEM block type. To preserve
+	// stdlib-curve parsing we take ownership of each block type our
+	// secp256k1 handling overlaps with and delegate back to stdlib for
+	// any curve other than secp256k1.
+	panicOnRegistrationError(jwkbb.RegisterX509Decoder[any](
+		jwkbb.ECPrivateKeyBlockType,
+		jwkbb.X509DecodeFunc[any](decodeECPrivateKey),
+	))
+	panicOnRegistrationError(jwkbb.RegisterX509Decoder[any](
+		jwkbb.PrivateKeyBlockType,
+		jwkbb.X509DecodeFunc[any](decodePrivateKey),
+	))
+	panicOnRegistrationError(jwkbb.RegisterX509Decoder[any](
+		jwkbb.PublicKeyBlockType,
+		jwkbb.X509DecodeFunc[any](decodePublicKey),
 	))
 }
 
-// decodeSecp256k1PEM returns the *ecdsa.PrivateKey or *ecdsa.PublicKey
-// carried by block when block encodes a secp256k1 key. For anything else
-// (non-EC block types, or EC blocks carrying a different curve), it returns
-// an error and the jwx.RegisterX509Decoder iteration tries the next
-// registered decoder — typically the default stdlib-backed one.
-func decodeSecp256k1PEM(block *pem.Block) (any, error) {
-	switch block.Type {
-	case blockECPrivateKey:
-		return decodeSEC1(block.Bytes)
-	case blockPrivateKey:
-		return decodePKCS8(block.Bytes)
-	case blockPublicKey:
-		return decodeSPKI(block.Bytes)
-	default:
-		return nil, fmt.Errorf(`es256k: unsupported PEM block type %q`, block.Type)
-	}
-}
-
-// decodeSEC1 parses a SEC1 ECPrivateKey. Returns an error (not a panic, and
-// not the stdlib parse) when the embedded curve OID is anything other than
-// secp256k1 so that callers can fall through to the default decoder.
-func decodeSEC1(der []byte) (*ecdsa.PrivateKey, error) {
+// decodeECPrivateKey handles `EC PRIVATE KEY` blocks. SEC1 keys carrying
+// the secp256k1 OID are parsed via the dcred backend; anything else
+// (P-256, P-384, P-521, or malformed input) is handed to stdlib.
+func decodeECPrivateKey(block *pem.Block) (any, error) {
 	var priv sec1ECPrivateKey
-	if _, err := asn1.Unmarshal(der, &priv); err != nil {
-		return nil, fmt.Errorf(`es256k: failed to parse SEC1 ECPrivateKey: %w`, err)
+	if _, err := asn1.Unmarshal(block.Bytes, &priv); err == nil && priv.NamedCurveOID.Equal(oidSecp256k1) {
+		return privateKeyFromScalar(priv.PrivateKey)
 	}
-	if !priv.NamedCurveOID.Equal(oidSecp256k1) {
-		return nil, fmt.Errorf(`es256k: SEC1 key uses curve OID %v, not secp256k1`, priv.NamedCurveOID)
-	}
-	return privateKeyFromScalar(priv.PrivateKey)
+	return x509.ParseECPrivateKey(block.Bytes)
 }
 
-// decodePKCS8 parses a PKCS#8 PrivateKeyInfo wrapping a SEC1 ECPrivateKey
-// whose algorithm parameters carry the secp256k1 OID.
-func decodePKCS8(der []byte) (*ecdsa.PrivateKey, error) {
+// decodePrivateKey handles `PRIVATE KEY` (PKCS#8) blocks. When the
+// outer AlgorithmIdentifier is ECDSA with the secp256k1 OID we build
+// the *ecdsa.PrivateKey ourselves; otherwise stdlib parses it.
+func decodePrivateKey(block *pem.Block) (any, error) {
 	var p8 pkcs8PrivateKey
-	if _, err := asn1.Unmarshal(der, &p8); err != nil {
-		return nil, fmt.Errorf(`es256k: failed to parse PKCS#8 PrivateKeyInfo: %w`, err)
+	if _, err := asn1.Unmarshal(block.Bytes, &p8); err == nil && p8.Algo.Algorithm.Equal(oidPublicKeyECDSA) {
+		if curveOID, err := parseCurveOIDParameters(p8.Algo.Parameters.FullBytes); err == nil && curveOID.Equal(oidSecp256k1) {
+			// Inner SEC1 ECPrivateKey; RFC 5958 says NamedCurveOID is
+			// omitted here because the outer AlgorithmIdentifier already
+			// carries it.
+			var inner sec1ECPrivateKey
+			if _, err := asn1.Unmarshal(p8.PrivateKey, &inner); err != nil {
+				return nil, fmt.Errorf(`es256k: failed to parse inner SEC1 ECPrivateKey: %w`, err)
+			}
+			return privateKeyFromScalar(inner.PrivateKey)
+		}
 	}
-	if !p8.Algo.Algorithm.Equal(oidPublicKeyECDSA) {
-		return nil, fmt.Errorf(`es256k: PKCS#8 algorithm OID %v is not ECDSA`, p8.Algo.Algorithm)
-	}
-	curveOID, err := parseCurveOIDParameters(p8.Algo.Parameters.FullBytes)
-	if err != nil {
-		return nil, err
-	}
-	if !curveOID.Equal(oidSecp256k1) {
-		return nil, fmt.Errorf(`es256k: PKCS#8 key uses curve OID %v, not secp256k1`, curveOID)
-	}
-	// Inner SEC1 ECPrivateKey; RFC 5958 says NamedCurveOID is omitted here
-	// because the outer AlgorithmIdentifier already carries it.
-	var inner sec1ECPrivateKey
-	if _, err := asn1.Unmarshal(p8.PrivateKey, &inner); err != nil {
-		return nil, fmt.Errorf(`es256k: failed to parse inner SEC1 ECPrivateKey: %w`, err)
-	}
-	return privateKeyFromScalar(inner.PrivateKey)
+	return x509.ParsePKCS8PrivateKey(block.Bytes)
 }
 
-// decodeSPKI parses a SubjectPublicKeyInfo whose algorithm parameters
-// carry the secp256k1 OID.
-func decodeSPKI(der []byte) (*ecdsa.PublicKey, error) {
+// decodePublicKey handles `PUBLIC KEY` (SubjectPublicKeyInfo) blocks.
+// secp256k1-carrying SPKI is parsed via dcred; stdlib handles the rest.
+func decodePublicKey(block *pem.Block) (any, error) {
 	var spki pkixPublicKeyInfo
-	if _, err := asn1.Unmarshal(der, &spki); err != nil {
-		return nil, fmt.Errorf(`es256k: failed to parse SubjectPublicKeyInfo: %w`, err)
+	if _, err := asn1.Unmarshal(block.Bytes, &spki); err == nil && spki.Algorithm.Algorithm.Equal(oidPublicKeyECDSA) {
+		if curveOID, err := parseCurveOIDParameters(spki.Algorithm.Parameters.FullBytes); err == nil && curveOID.Equal(oidSecp256k1) {
+			// BitString.Bytes is the SEC1 encoded point (compressed or
+			// uncompressed); secp256k1.ParsePubKey accepts both and
+			// validates on-curve.
+			if len(spki.PublicKey.Bytes) == 0 {
+				return nil, fmt.Errorf(`es256k: SPKI public key is empty`)
+			}
+			pub, err := secp256k1.ParsePubKey(spki.PublicKey.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf(`es256k: invalid secp256k1 public point: %w`, err)
+			}
+			return pub.ToECDSA(), nil
+		}
 	}
-	if !spki.Algorithm.Algorithm.Equal(oidPublicKeyECDSA) {
-		return nil, fmt.Errorf(`es256k: SPKI algorithm OID %v is not ECDSA`, spki.Algorithm.Algorithm)
-	}
-	curveOID, err := parseCurveOIDParameters(spki.Algorithm.Parameters.FullBytes)
-	if err != nil {
-		return nil, err
-	}
-	if !curveOID.Equal(oidSecp256k1) {
-		return nil, fmt.Errorf(`es256k: SPKI key uses curve OID %v, not secp256k1`, curveOID)
-	}
-	// BitString.Bytes is the SEC1 encoded point (compressed or uncompressed);
-	// secp256k1.ParsePubKey accepts both and validates on-curve.
-	if len(spki.PublicKey.Bytes) == 0 {
-		return nil, fmt.Errorf(`es256k: SPKI public key is empty`)
-	}
-	pub, err := secp256k1.ParsePubKey(spki.PublicKey.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf(`es256k: invalid secp256k1 public point: %w`, err)
-	}
-	return pub.ToECDSA(), nil
+	return x509.ParsePKIXPublicKey(block.Bytes)
 }
 
 // parseCurveOIDParameters unmarshals the Parameters field of an ECDSA

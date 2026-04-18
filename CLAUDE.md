@@ -19,19 +19,19 @@ This module registers the secp256k1 curve and ES256K signature algorithm via jwx
 | `jwk/ecdsa` | `RegisterCurve()` | Map secp256k1 to `elliptic.Curve` for ECDSA key handling |
 | `jws` | `RegisterAlgorithmForKeyType()` | Associate ES256K with EC key type |
 | `jwsbb` | `RegisterDsigAlgorithm()` | Map ES256K to dsig algorithm |
-| `jwk` | `RegisterX509Decoder()` | Decode secp256k1 PEM blocks (SEC1, PKCS#8, SubjectPublicKeyInfo) that Go stdlib rejects |
+| `jwk/jwkbb` | `RegisterX509Decoder[T](blockType, d)` | Decode secp256k1 PEM blocks (SEC1, PKCS#8, SubjectPublicKeyInfo) that Go stdlib rejects. One registration per block type; non-secp256k1 curves delegate back to stdlib. |
 
 ### secp256k1 PEM decoding
 
 Go's `crypto/x509` hardcodes a list of four named curves (P-224, P-256, P-384, P-521) in `namedCurveFromOID`. secp256k1's OID (`1.3.132.0.10`) is not in that list, so stdlib fails any attempt to parse a secp256k1-carrying PEM block with `x509: unknown elliptic curve`.
 
-`x509.go` registers a secondary `X509Decoder` via `jwk.RegisterX509Decoder`. The decoder handles:
+`x509.go` registers one `X509Decoder` per block type via `jwkbb.RegisterX509Decoder[T]`, taking ownership of:
 
 - `EC PRIVATE KEY` (SEC1 / RFC 5915)
 - `PRIVATE KEY` (PKCS#8 / RFC 5958 wrapping SEC1 inside)
 - `PUBLIC KEY` (SubjectPublicKeyInfo / RFC 5280)
 
-For each it asn1-unmarshals a cut-down struct, checks the curve OID is secp256k1, and builds an `*ecdsa.PrivateKey` or `*ecdsa.PublicKey` backed by `github.com/decred/dcrd/dcrec/secp256k1/v4`. Non-secp256k1 inputs return an error so `jwk.decodeX509`'s iteration falls through to the default stdlib-backed decoder.
+For each, it asn1-unmarshals a cut-down struct and checks the curve OID. If the OID is secp256k1 the key is built via `github.com/decred/dcrd/dcrec/secp256k1/v4`. Any other curve (or malformed input) falls through to the stdlib parser (`x509.ParseECPrivateKey` / `x509.ParsePKCS8PrivateKey` / `x509.ParsePKIXPublicKey`), so registering this decoder does not break P-256 / P-384 / P-521 parsing.
 
 `CERTIFICATE` blocks are out of scope for now — full cert parsing is a much larger undertaking and the current demand is key material only.
 

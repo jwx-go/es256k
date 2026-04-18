@@ -136,7 +136,7 @@ func TestParseSecp256k1PEM_SEC1(t *testing.T) {
 	priv := generateKey(t)
 	pemBytes := encodeSEC1(t, priv)
 
-	key, err := jwk.ParseKey[jwk.Key](pemBytes, jwk.WithPEM(true))
+	key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
 	require.NoError(t, err, "jwk.ParseKey on SEC1 secp256k1 PEM")
 	require.NotNil(t, key)
 
@@ -153,7 +153,7 @@ func TestParseSecp256k1PEM_PKCS8(t *testing.T) {
 	priv := generateKey(t)
 	pemBytes := encodePKCS8(t, priv)
 
-	key, err := jwk.ParseKey[jwk.Key](pemBytes, jwk.WithPEM(true))
+	key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
 	require.NoError(t, err, "jwk.ParseKey on PKCS#8 secp256k1 PEM")
 	require.NotNil(t, key)
 
@@ -168,7 +168,7 @@ func TestParseSecp256k1PEM_SPKI(t *testing.T) {
 	priv := generateKey(t)
 	pemBytes := encodeSPKI(t, &priv.PublicKey)
 
-	key, err := jwk.ParseKey[jwk.Key](pemBytes, jwk.WithPEM(true))
+	key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
 	require.NoError(t, err, "jwk.ParseKey on SPKI secp256k1 PEM")
 	require.NotNil(t, key)
 
@@ -178,10 +178,11 @@ func TestParseSecp256k1PEM_SPKI(t *testing.T) {
 	require.Equal(t, priv.Y, raw.Y, "public Y")
 }
 
-// TestStdlibCurveStillWorks confirms that adding the secp256k1 decoder does
-// not break parsing of PEM blocks carrying stdlib-supported curves. The
-// default decoder is registered first; our secp256k1 decoder is tried only
-// if the default rejects the block.
+// TestStdlibCurveStillWorks confirms that adding the secp256k1 decoder
+// does not break parsing of PEM blocks carrying stdlib-supported
+// curves. jwkbb dispatches decoders by block type, so our decoder
+// owns `EC PRIVATE KEY` / `PRIVATE KEY` / `PUBLIC KEY`; it delegates
+// back to stdlib whenever the embedded curve OID is not secp256k1.
 func TestStdlibCurveStillWorks(t *testing.T) {
 	// Generate a P-256 key via stdlib and emit SEC1 + PKCS8 + SPKI PEMs.
 	p256, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -192,7 +193,7 @@ func TestStdlibCurveStillWorks(t *testing.T) {
 		require.NoError(t, err, "x509.MarshalECPrivateKey")
 		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
 
-		key, err := jwk.ParseKey[jwk.Key](pemBytes, jwk.WithPEM(true))
+		key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
 		require.NoError(t, err, "jwk.ParseKey should accept stdlib P-256")
 		require.NotNil(t, key)
 	})
@@ -202,7 +203,7 @@ func TestStdlibCurveStillWorks(t *testing.T) {
 		require.NoError(t, err, "x509.MarshalPKCS8PrivateKey")
 		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
 
-		key, err := jwk.ParseKey[jwk.Key](pemBytes, jwk.WithPEM(true))
+		key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
 		require.NoError(t, err, "jwk.ParseKey should accept stdlib PKCS8 P-256")
 		require.NotNil(t, key)
 	})
@@ -212,7 +213,7 @@ func TestStdlibCurveStillWorks(t *testing.T) {
 		require.NoError(t, err, "x509.MarshalPKIXPublicKey")
 		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
 
-		key, err := jwk.ParseKey[jwk.Key](pemBytes, jwk.WithPEM(true))
+		key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
 		require.NoError(t, err, "jwk.ParseKey should accept stdlib SPKI P-256")
 		require.NotNil(t, key)
 	})
