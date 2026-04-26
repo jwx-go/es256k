@@ -40,6 +40,43 @@ func TestES256KCurveAvailable(t *testing.T) {
 	require.True(t, ourecdsa.IsCurveAvailable(es256k.Secp256k1()), `secp256k1 should be available`)
 }
 
+// TestSecp256k1PointValidatorRejectsOversized asserts the registered
+// secp256k1 PointValidator returns a typed error rather than panicking
+// when handed a coordinate larger than the curve's 256-bit field. The
+// validator pads x and y into a fixed 32-byte window via
+// big.Int.FillBytes; an oversized input would panic with
+// "math/big: buffer too small to fit value" deep inside math/big.
+//
+// Newer jwx releases also bound coordinates inside validateECDSAPoint
+// before calling the registered validator, but this guard inside the
+// validator itself is defense-in-depth: jwk/ecdsa.PointValidator's
+// previous contract did not pin the precondition, and a direct call
+// site (or an older jwx release) must still not crash the process.
+func TestSecp256k1PointValidatorRejectsOversized(t *testing.T) {
+	t.Parallel()
+
+	validator, err := ourecdsa.ValidatorFromCurve(es256k.Secp256k1())
+	require.NoError(t, err, `secp256k1 validator should be registered`)
+
+	// 33 bytes with non-zero leading byte → BitLen() > 256.
+	oversize := make([]byte, 33)
+	oversize[0] = 0xff
+	bigVal := new(big.Int).SetBytes(oversize)
+	smallVal := big.NewInt(1)
+
+	t.Run("oversized x", func(t *testing.T) {
+		t.Parallel()
+		err := validator.ValidatePoint(bigVal, smallVal)
+		require.Error(t, err, `validator must reject oversized x without panicking`)
+	})
+
+	t.Run("oversized y", func(t *testing.T) {
+		t.Parallel()
+		err := validator.ValidatePoint(smallVal, bigVal)
+		require.Error(t, err, `validator must reject oversized y without panicking`)
+	})
+}
+
 func TestES256KSign(t *testing.T) {
 	t.Parallel()
 	payload := []byte("Hello, World!")
