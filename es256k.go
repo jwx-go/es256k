@@ -75,7 +75,21 @@ func init() {
 // Coordinates are padded to 32 bytes per secp256k1 field size, so a
 // legitimate jwk key whose x or y big.Int has leading zero bytes is
 // still encoded correctly.
+//
+// The explicit BitLen guards are defense-in-depth. Newer jwx releases
+// bound x and y to the curve's field size in validateECDSAPoint before
+// invoking the registered validator, but jwk/ecdsa.PointValidator's
+// historical contract did not pin that precondition, so a direct
+// caller (or an older jwx release) handing in an oversized big.Int
+// must still get a typed error rather than a math/big.FillBytes panic.
 var secp256k1PointValidator = ourecdsa.PointValidatorFunc(func(x, y *big.Int) error {
+	const coordBits = 256
+	if x.BitLen() > coordBits {
+		return fmt.Errorf(`invalid secp256k1 public key: x is %d bits, exceeds field size of %d bits`, x.BitLen(), coordBits)
+	}
+	if y.BitLen() > coordBits {
+		return fmt.Errorf(`invalid secp256k1 public key: y is %d bits, exceeds field size of %d bits`, y.BitLen(), coordBits)
+	}
 	const coordSize = 32
 	buf := make([]byte, 1+2*coordSize)
 	buf[0] = 0x04
