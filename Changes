@@ -1,6 +1,11 @@
 Changes
 =======
 
+v4.0.1 28 Apr 2026
+  * Guard the secp256k1 PointValidator against oversized X/Y coordinates
+    before calling secp256k1.ParsePubKey (which panics on inputs longer
+    than 32 bytes). Out-of-range coordinates now return a typed error.
+
 v4.0.0 19 Apr 2026
   * First stable v4 release. Tracks github.com/lestrrat-go/jwx/v4 v4.0.0.
 
