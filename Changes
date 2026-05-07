@@ -1,6 +1,13 @@
 Changes
 =======
 
+v4.0.2 7 May 2026
+  * Reject malformed secp256k1 private-key scalars at parse time:
+    scalars longer than the SEC1 §C.4-mandated 32 bytes (which
+    dcred silently truncates and reduces mod N) and the all-zero
+    scalar (which produces an invalid signing key). Previously,
+    both were accepted and surfaced as opaque downstream failures.
+
 v4.0.1 28 Apr 2026
   * Guard the secp256k1 PointValidator against oversized X/Y coordinates
     before calling secp256k1.ParsePubKey (which panics on inputs longer
