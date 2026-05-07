@@ -146,10 +146,25 @@ func parseCurveOIDParameters(raw []byte) (asn1.ObjectIdentifier, error) {
 // secp256k1 scalar. The public key is derived on the fly rather than
 // trusting any public-key bytes carried alongside the private key, so an
 // adversarial or buggy encoder cannot produce a mis-paired key.
+//
+// SEC1 §C.4 specifies the secp256k1 private key as a fixed 32-byte
+// octet string. We therefore reject any input longer than 32 bytes:
+// dcred's [secp256k1.PrivKeyFromBytes] silently truncates and reduces
+// modulo N, so without this gate two distinct PEM payloads could
+// deserialize to the same key and any caller hashing the encoded bytes
+// for fingerprinting would be wrong. We also reject the all-zero
+// scalar (and any value that reduces to zero mod N) — D = 0 is not a
+// valid secp256k1 private key and downstream operations are undefined.
 func privateKeyFromScalar(d []byte) (*ecdsa.PrivateKey, error) {
 	if len(d) == 0 {
 		return nil, fmt.Errorf(`es256k: secp256k1 private key scalar is empty`)
 	}
+	if len(d) > 32 {
+		return nil, fmt.Errorf(`es256k: secp256k1 private key scalar is %d bytes; SEC1 §C.4 specifies 32`, len(d))
+	}
 	priv := secp256k1.PrivKeyFromBytes(d)
+	if priv.Key.IsZero() {
+		return nil, fmt.Errorf(`es256k: secp256k1 private key scalar is zero (or a multiple of curve order N)`)
+	}
 	return priv.ToECDSA(), nil
 }

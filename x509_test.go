@@ -219,6 +219,115 @@ func TestStdlibCurveStillWorks(t *testing.T) {
 	})
 }
 
+// TestPrivateKeyScalarBounds pins the contract that
+// privateKeyFromScalar rejects malformed scalars routed through the
+// SEC1 / PKCS#8 PEM decoders:
+//
+//   - Oversized scalars (>32 bytes) — dcred would silently truncate
+//     and reduce mod N, so two distinct PEMs could deserialize to
+//     the same key and PEM-bytes-as-identifier would collide.
+//   - All-zero scalars — D = 0 is not a valid secp256k1 key.
+//
+// Each subcase crafts a fresh SEC1 (or PKCS#8) DER manually with the
+// hostile scalar payload so the rejection is exercised at the actual
+// jwk.ParseKey entry point.
+func TestPrivateKeyScalarBounds(t *testing.T) {
+	t.Run("SEC1 oversized scalar (33 bytes) rejected", func(t *testing.T) {
+		pemBytes := encodeSEC1WithScalar(t, append([]byte{0x01}, make([]byte, 32)...))
+		_, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
+		require.Error(t, err, "33-byte SEC1 scalar must be rejected")
+		require.Contains(t, err.Error(), "32",
+			"error must reference the 32-byte SEC1 spec size")
+	})
+
+	t.Run("SEC1 zero scalar rejected", func(t *testing.T) {
+		pemBytes := encodeSEC1WithScalar(t, make([]byte, 32))
+		_, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
+		require.Error(t, err, "all-zero SEC1 scalar must be rejected")
+		require.Contains(t, err.Error(), "zero")
+	})
+
+	t.Run("PKCS8 oversized scalar (40 bytes) rejected", func(t *testing.T) {
+		pemBytes := encodePKCS8WithScalar(t, make([]byte, 40))
+		_, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
+		require.Error(t, err, "40-byte PKCS8 inner scalar must be rejected")
+	})
+
+	t.Run("PKCS8 zero scalar rejected", func(t *testing.T) {
+		pemBytes := encodePKCS8WithScalar(t, make([]byte, 32))
+		_, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
+		require.Error(t, err, "all-zero PKCS8 inner scalar must be rejected")
+		require.Contains(t, err.Error(), "zero")
+	})
+
+	t.Run("legitimate 32-byte non-zero scalar still accepted", func(t *testing.T) {
+		pemBytes := encodeSEC1(t, generateKey(t))
+		key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
+		require.NoError(t, err, "valid SEC1 must still parse")
+		require.NotNil(t, key)
+	})
+}
+
+// encodeSEC1WithScalar marshals a SEC1 EC PRIVATE KEY PEM whose
+// PrivateKey octet string is the supplied raw bytes (no padding,
+// no validation). Public key field is omitted; the production decoder
+// derives the public key from the scalar.
+func encodeSEC1WithScalar(t *testing.T, scalar []byte) []byte {
+	t.Helper()
+
+	sec1 := struct {
+		Version       int
+		PrivateKey    []byte
+		NamedCurveOID asn1.ObjectIdentifier `asn1:"optional,explicit,tag:0"`
+	}{
+		Version:       1,
+		PrivateKey:    scalar,
+		NamedCurveOID: testOIDSecp256k1,
+	}
+
+	der, err := asn1.Marshal(sec1)
+	require.NoError(t, err, "asn1.Marshal(sec1)")
+
+	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
+}
+
+// encodePKCS8WithScalar marshals a PKCS#8 PRIVATE KEY PEM whose inner
+// SEC1 ECPrivateKey carries the supplied raw scalar bytes. Mirrors
+// encodePKCS8 but with no padding/validation on the scalar.
+func encodePKCS8WithScalar(t *testing.T, scalar []byte) []byte {
+	t.Helper()
+
+	inner := struct {
+		Version    int
+		PrivateKey []byte
+	}{
+		Version:    1,
+		PrivateKey: scalar,
+	}
+	innerDER, err := asn1.Marshal(inner)
+	require.NoError(t, err, "asn1.Marshal(inner SEC1)")
+
+	curveOIDDER, err := asn1.Marshal(testOIDSecp256k1)
+	require.NoError(t, err, "asn1.Marshal(curveOID)")
+
+	pkcs8 := struct {
+		Version    int
+		Algo       pkix.AlgorithmIdentifier
+		PrivateKey []byte
+	}{
+		Version: 0,
+		Algo: pkix.AlgorithmIdentifier{
+			Algorithm:  testOIDECDSA,
+			Parameters: asn1.RawValue{FullBytes: curveOIDDER},
+		},
+		PrivateKey: innerDER,
+	}
+	der, err := asn1.Marshal(pkcs8)
+	require.NoError(t, err, "asn1.Marshal(pkcs8)")
+
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+}
+
 // Sanity check: keep the package imported so init() registration runs even
 // if no symbol is referenced directly.
 var _ = es256k.ES256K
