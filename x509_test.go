@@ -24,6 +24,12 @@ var (
 	testOIDECDSA     = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
 )
 
+// PEM block types used by the test fixtures.
+const (
+	pemTypeECPrivateKey = "EC PRIVATE KEY"
+	pemTypePrivateKey   = "PRIVATE KEY"
+)
+
 // generateKey returns a fresh secp256k1 keypair as an *ecdsa.PrivateKey.
 // Using the library helper so the test does not depend on the production
 // decoder under test.
@@ -60,7 +66,7 @@ func encodeSEC1(t *testing.T, priv *ecdsa.PrivateKey) []byte {
 	der, err := asn1.Marshal(sec1)
 	require.NoError(t, err, "asn1.Marshal(sec1)")
 
-	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
+	return pem.EncodeToMemory(&pem.Block{Type: pemTypeECPrivateKey, Bytes: der})
 }
 
 // encodePKCS8 marshals an *ecdsa.PrivateKey into a PKCS#8 PRIVATE KEY PEM.
@@ -103,7 +109,7 @@ func encodePKCS8(t *testing.T, priv *ecdsa.PrivateKey) []byte {
 	der, err := asn1.Marshal(p8)
 	require.NoError(t, err, "asn1.Marshal(pkcs8)")
 
-	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	return pem.EncodeToMemory(&pem.Block{Type: pemTypePrivateKey, Bytes: der})
 }
 
 // encodeSPKI marshals an *ecdsa.PublicKey into a SubjectPublicKeyInfo
@@ -191,7 +197,7 @@ func TestStdlibCurveStillWorks(t *testing.T) {
 	t.Run("SEC1 P-256", func(t *testing.T) {
 		der, err := x509.MarshalECPrivateKey(p256)
 		require.NoError(t, err, "x509.MarshalECPrivateKey")
-		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
+		pemBytes := pem.EncodeToMemory(&pem.Block{Type: pemTypeECPrivateKey, Bytes: der})
 
 		key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
 		require.NoError(t, err, "jwk.ParseKey should accept stdlib P-256")
@@ -201,7 +207,7 @@ func TestStdlibCurveStillWorks(t *testing.T) {
 	t.Run("PKCS8 P-256", func(t *testing.T) {
 		der, err := x509.MarshalPKCS8PrivateKey(p256)
 		require.NoError(t, err, "x509.MarshalPKCS8PrivateKey")
-		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+		pemBytes := pem.EncodeToMemory(&pem.Block{Type: pemTypePrivateKey, Bytes: der})
 
 		key, err := jwk.ParseKey(pemBytes, jwk.WithX509(true))
 		require.NoError(t, err, "jwk.ParseKey should accept stdlib PKCS8 P-256")
@@ -288,7 +294,7 @@ func encodeSEC1WithScalar(t *testing.T, scalar []byte) []byte {
 	der, err := asn1.Marshal(sec1)
 	require.NoError(t, err, "asn1.Marshal(sec1)")
 
-	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
+	return pem.EncodeToMemory(&pem.Block{Type: pemTypeECPrivateKey, Bytes: der})
 }
 
 // encodePKCS8WithScalar marshals a PKCS#8 PRIVATE KEY PEM whose inner
@@ -325,7 +331,7 @@ func encodePKCS8WithScalar(t *testing.T, scalar []byte) []byte {
 	der, err := asn1.Marshal(pkcs8)
 	require.NoError(t, err, "asn1.Marshal(pkcs8)")
 
-	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	return pem.EncodeToMemory(&pem.Block{Type: pemTypePrivateKey, Bytes: der})
 }
 
 // Sanity check: keep the package imported so init() registration runs even
